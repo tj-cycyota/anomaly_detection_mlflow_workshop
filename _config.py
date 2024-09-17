@@ -9,6 +9,8 @@ raw = "iot_data_raw/"
 raw_clean = "iot_data_clean/"
 landing = "iot_data_landing/"
 autoloader_path = "checkpoints/"
+stream_chkpt = "stream_checkpoints/"
+stream_table = "stream_delta/"
 
 print("user_folder:", user_folder)
 

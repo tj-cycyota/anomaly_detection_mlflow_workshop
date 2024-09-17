@@ -16,6 +16,7 @@
 # COMMAND ----------
 
 from pyspark.sql.functions import to_timestamp, unix_timestamp, col
+import mlflow
 
 # COMMAND ----------
 
@@ -56,11 +57,14 @@ new_batch_data = (spark.read
 # MAGIC
 # MAGIC We'll start with simple batch inference, demonstrating a job that might run every few minutes or hours, to get a sense of how to apply a model to new data.
 # MAGIC
+# MAGIC This approach uses `mlflow.pyfunc.spark_udf`, which is a generic Python Function flavor of a model logged to MLflow that we load back with a Spark User-Defined Function (UDF). Notice how in the command below:
+# MAGIC * We don't need to know **how** the model was trained or with which framework (Tensorflow, SKLearn, etc.). This approach allows us to apply **any** machine learning model in a performant manner with Spark.
+# MAGIC * All we need to know is the **name of the model** and the **model stage** (e.g. `Production`). We don't need to know where physically the model artifacts are kept in cloud storage, or the version of the model currently in this stage. This approach allows to keep running production inference pipelines as our model continues to be re-trained or improved offline. 
+# MAGIC
 # MAGIC Make sure you have transitioned your model to `Production` stage:
 
 # COMMAND ----------
 
-import mlflow
 loaded_model = mlflow.pyfunc.spark_udf(
     spark, 
     model_uri=f"models:/{registered_model_name}/Production", 
@@ -95,6 +99,8 @@ display(new_batch_data_anomalies)
 # MAGIC AutoLoader is a Databricks feature that continually loads data from a cloud storage location. It is a powerful feature for anomaly detection, as new records that arrive will be continually processed at low latency.
 # MAGIC
 # MAGIC [Autoloader Docs](https://learn.microsoft.com/en-us/azure/databricks/ingestion/cloud-object-storage/auto-loader/)
+# MAGIC
+# MAGIC On this Structured Streaming Dataframe we will apply our ML model, almost identically to how we did on the Batch use-case. With almost no code changes, we are able to scale our inference pipeline to ~second-level latency. 
 
 # COMMAND ----------
 
@@ -173,6 +179,8 @@ datafactory.load()
 
 # MAGIC %md
 # MAGIC Now we can turn our DataFactory on to `continuous` mode so a new file arrives every 60 seconds. Monitor the charts above to see data flowing in. 
+# MAGIC
+# MAGIC (If you want to move on without every file loading, cancel the cell run)
 
 # COMMAND ----------
 
@@ -186,22 +194,82 @@ display(dbutils.fs.ls(landing_directory))
 
 # MAGIC %md
 # MAGIC ## Write Stream to a Delta table
+# MAGIC
+# MAGIC While it is useful to look at this Stream in the UI, we must persist the data to a Delta table to make use of it for dashboarding or SQL queries by other users/jobs. Similar to batch `write()` syntax, we will use `writeStream()`. 
 
 # COMMAND ----------
 
+stream_checkpoints_path = user_folder+stream_chkpt
+print(f"Streaming table checkpoints in:     {stream_checkpoints_path}")
 
+stream_table_path = user_folder+stream_table
+print(f"Streaming table saved in:           {stream_table_path}")
+
+# COMMAND ----------
+
+streaming_table = (streaming_df.writeStream
+   .outputMode("append")
+   .option("checkpointLocation", stream_checkpoints_path) # Stream Writes require a checkpoint path
+   .option("path", stream_table_path)
+   .start()
+)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Stream from our first Delta table
+# MAGIC We can quickly query our Delta table to check that the data is written. 
 # MAGIC
-# MAGIC Delta tables are also a Streaming Source!
+# MAGIC Note that in the code below, this query is returning a "snapshot" of the current data in the table (which is in contrast to the code above, which is showing a constantly-refreshed version of the Streaming query). Delta guarantees that readers always get the latest version of the data in the table while not blocking writers from continuing to update/append/delete records.
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC -- Replace with your table path from a few cells above
+# MAGIC SELECT * FROM delta.`dbfs:/Users/YOURUSERNAME/stream_delta/`
+
+# COMMAND ----------
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+df = spark.sql(f"""
+SELECT 
+    device_id, 
+    DATE_TRUNC('HOUR', timestamp) AS hour,
+    COUNT(DISTINCT timestamp) AS anomaly_count
+FROM delta.`{stream_table_path}`
+WHERE predictions == -1
+GROUP BY ALL
+HAVING anomaly_count >2
+ORDER BY hour ASC
+""").toPandas()
+
+display(df)
+
+plt.figure(figsize=(12, 6))
+for device_id, group in df.groupby('device_id'):
+    plt.plot(group['hour'], group['anomaly_count'], label=device_id)
+
+plt.xlabel('Hour')
+plt.ylabel('Anomaly Count')
+plt.title('Anomaly Count by Hour for Each Device')
+plt.legend(title='Device ID', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(True)
+plt.tight_layout()  # Adjust subplots to fit into figure area.
+plt.show()
 
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## (Optional) Stream from our first Delta table
 # MAGIC
+# MAGIC Delta tables are also a Streaming Source! Lets create another Structured Streaming query with this first Delta table as a source:
+
+# COMMAND ----------
+
+new_streaming_df = spark.readStream.load(stream_table_path)
+
+display(new_streaming_df)
 
 # COMMAND ----------
 
