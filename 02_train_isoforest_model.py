@@ -7,6 +7,9 @@
 # MAGIC
 # MAGIC ![iso forest](https://scikit-learn.org/stable/_images/sphx_glr_plot_isolation_forest_002.png)
 # MAGIC
+# MAGIC #### Setup
+# MAGIC This code has been created and tested for Databricks Runtime `15.4.x-cpu-ml-scala2.12`. Please make sure your cluster conforms to this version. 
+# MAGIC
 # MAGIC Inspiration: https://www.databricks.com/blog/near-real-time-anomaly-detection-delta-live-tables-and-databricks-machine-learning
 # MAGIC
 # MAGIC Resource: https://victoriametrics.com/blog/victoriametrics-anomaly-detection-handbook-chapter-3/

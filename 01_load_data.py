@@ -1,4 +1,10 @@
 # Databricks notebook source
+# MAGIC %md
+# MAGIC #### Setup
+# MAGIC This code has been created and tested for Databricks Runtime `15.4.x-cpu-ml-scala2.12`. Please make sure your cluster conforms to this version. 
+
+# COMMAND ----------
+
 # MAGIC %run ./_config
 
 # COMMAND ----------

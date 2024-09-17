@@ -8,6 +8,9 @@
 # MAGIC * Files arriving in Cloud Storage (this demo)
 # MAGIC * Kafka/EventHub streaming source
 # MAGIC * Delta Table streaming source
+# MAGIC
+# MAGIC #### Setup
+# MAGIC This code has been created and tested for Databricks Runtime `15.4.x-cpu-ml-scala2.12`. Please make sure your cluster conforms to this version. 
 
 # COMMAND ----------
 
